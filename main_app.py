@@ -3,6 +3,30 @@ import streamlit as st
 import requests
 import time
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Load environment variables from .env
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+
+def get_movie_details(title):
+    """Fetch movie overview and poster using TMDB API."""
+    if not TMDB_API_KEY:
+        return {"overview": "No API key found.", "poster": None}
+
+    url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        if data["results"]:
+            movie = data["results"][0]
+            return {
+                "overview": movie.get("overview", "No description available."),
+                "poster": f"https://image.tmdb.org/t/p/w200{movie.get('poster_path')}" if movie.get("poster_path") else None
+            }
+    return {"overview": "No details found.", "poster": None}
+
 
 st.markdown("""
     <style>
@@ -82,9 +106,12 @@ if st.button("Get Recommendations 🎬"):
         cols = st.columns(3)
         for idx, movie in enumerate(recommended_movies):
             with cols[idx % 3]:
-                poster = movie.get("poster", "https://via.placeholder.com/200x300?text=No+Image")
+                details = get_movie_details(movie["title"])
+                poster = details["poster"] or "https://via.placeholder.com/200x300?text=No+Image"
                 st.image(poster, width=200)
                 st.markdown(f"**{movie['title']}**")
+                st.caption(details["overview"][:200] + "...")
+
                 time.sleep(0.1)
 
         success_box = status_placeholder.success("Recommendations generated successfully!")
