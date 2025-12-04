@@ -30,16 +30,50 @@ def get_movie_details(title):
 
 st.markdown("""
     <style>
-        /* Style Streamlit progress bar to match dark theme */
+        /* --- App Background and Text --- */
+        .stApp {
+            background: linear-gradient(180deg, #0f0f0f, #1a1a1a);
+            color: #f5f5f5;
+        }
+
+        /* --- Progress Bar (Keep Your Gradient) --- */
         div[data-testid="stProgress"] > div > div > div {
             background: linear-gradient(90deg, #8A2BE2, #20B2AA);
-        }
-        /* Optional: Customize success message color */
-        .stAlert {
+            height: 10px;
             border-radius: 10px;
         }
+
+        /* --- Buttons: Modern Rounded Look --- */
+        button[kind="secondary"] {
+            border-radius: 12px !important;
+        }
+
+        /* --- Success / Warning Boxes --- */
+        .stAlert {
+            border-radius: 10px;
+            background-color: #222222;
+            color: #f5f5f5;
+        }
+
+        /* --- Movie Titles --- */
+        .stMarkdown p {
+            text-align: center;
+            font-weight: bold;
+            color: #e0e0e0;
+        }
+
+        /* --- Movie Descriptions --- */
+        .stCaption {
+            text-align: center;
+            color: #cccccc;
+            font-size: 0.9rem;
+        }
+
+        /* --- Footer (optional if you add one later) --- */
+        footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
+
 
 
 try:
@@ -123,9 +157,17 @@ if st.session_state.get("recommended_movies"):
         with cols[idx % 3]:
             details = get_movie_details(movie["title"])
             poster = details["poster"] or "https://via.placeholder.com/200x300?text=No+Image"
-            st.image(poster, width=200)
-            st.markdown(f"**{movie['title']}**")
-            st.caption(details["overview"][:200] + "...")
+            st.markdown(
+    f"""
+    <div style='text-align:center;'>
+        <img src='{poster}' width='200' style='border-radius:10px; margin-bottom:10px;'>
+        <p style='font-weight:bold; color:#f0f0f0;'>{movie['title']}</p>
+        <p style='font-size:0.9rem; color:#cccccc;'>{details["overview"][:200]}...</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
             time.sleep(0.1)
 
     success_box = status_placeholder.success("Recommendations generated successfully!")
