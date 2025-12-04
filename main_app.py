@@ -68,12 +68,23 @@ selected_genre = st.selectbox(
 favorite_movies = st.text_area("List a few movies you’ve liked (comma separated):")
 
 
-# Fetch Recommendations
-recommended_movies = []
+# Fetch Recommendations with Session State 
+if "recommended_movies" not in st.session_state:
+    st.session_state.recommended_movies = []
 
-if st.button("Get Recommendations 🎬"):
+# Placeholders for messages
+status_placeholder = st.empty()
+
+# Use columns to align buttons side by side
+col1, col2 = st.columns(2)
+with col1:
+    get_clicked = st.button("Get Recommendations 🎬")
+with col2:
+    clear_clicked = st.button("Clear Results")
+
+# Get Recommendations Logic 
+if get_clicked:
     with st.spinner("Fetching personalized recommendations..."):
-
         progress = st.progress(0)
         for i in range(100):
             time.sleep(0.01)
@@ -84,40 +95,45 @@ if st.button("Get Recommendations 🎬"):
         if get_recommendations and analyze_mood:
             try:
                 mood_score = analyze_mood(user_mood)
-                recommended_movies = get_recommendations(mood_score, selected_genre, favorite_movies)
+                st.session_state.recommended_movies = get_recommendations(
+                    mood_score, selected_genre, favorite_movies
+                )
             except Exception as e:
                 st.error(f"Something went wrong: {e}")
-                recommended_movies = []
+                st.session_state.recommended_movies = []
         else:
-            recommended_movies = [
-                {"title": "Inception", "poster": "https://image.tmdb.org/t/p/w200/qmDpIHrmpJINaRKAfWQfftjCdyi.jpg"},
-                {"title": "Interstellar", "poster": "https://image.tmdb.org/t/p/w200/rAiYTfKGqDCRIIqo664sY9XZIvQ.jpg"},
-                {"title": "The Dark Knight", "poster": "https://image.tmdb.org/t/p/w200/qJ2tW6WMUDux911r6m7haRef0WH.jpg"},
-                {"title": "Tenet", "poster": "https://image.tmdb.org/t/p/w200/aCIFMriQh8rvhxpN1IWGgvH0Tlg.jpg"}
+            st.session_state.recommended_movies = [
+                {"title": "Inception"},
+                {"title": "Interstellar"},
+                {"title": "The Dark Knight"},
+                {"title": "Tenet"},
             ]
 
-    # Create placeholder for messages
-    status_placeholder = st.empty()
+# Clear Results Logic 
+if clear_clicked:
+    st.session_state.recommended_movies = []
+    st.rerun()
 
-    # --- Display Recommendations (now inside button logic) ---
-    if recommended_movies:
-        st.subheader("🎥 Personalized Movie Recommendations")
+# Display Recommendations 
+if st.session_state.get("recommended_movies"):
+    st.subheader("🎥 Personalized Movie Recommendations")
 
-        cols = st.columns(3)
-        for idx, movie in enumerate(recommended_movies):
-            with cols[idx % 3]:
-                details = get_movie_details(movie["title"])
-                poster = details["poster"] or "https://via.placeholder.com/200x300?text=No+Image"
-                st.image(poster, width=200)
-                st.markdown(f"**{movie['title']}**")
-                st.caption(details["overview"][:200] + "...")
+    cols = st.columns(3)
+    for idx, movie in enumerate(st.session_state.recommended_movies):
+        with cols[idx % 3]:
+            details = get_movie_details(movie["title"])
+            poster = details["poster"] or "https://via.placeholder.com/200x300?text=No+Image"
+            st.image(poster, width=200)
+            st.markdown(f"**{movie['title']}**")
+            st.caption(details["overview"][:200] + "...")
+            time.sleep(0.1)
 
-                time.sleep(0.1)
+    success_box = status_placeholder.success("Recommendations generated successfully!")
+    time.sleep(3)
+    success_box.empty()
 
-        success_box = status_placeholder.success("Recommendations generated successfully!")
-        time.sleep(3)
-        success_box.empty()
-    else:
-        warning_box = status_placeholder.warning("No recommendations available yet. Try again later!")
-        time.sleep(3)
-        warning_box.empty()
+elif "recommended_movies" in st.session_state and not st.session_state.recommended_movies:
+    # Only show warning if the session variable exists but is empty
+    warning_box = status_placeholder.warning("No recommendations available yet. Try again later!")
+    time.sleep(3)
+    warning_box.empty()
