@@ -2,17 +2,18 @@
 import streamlit as st
 import requests
 import time
-
 from dotenv import load_dotenv
 import os
 
-load_dotenv()  # Load environment variables from .env
+# --- Load API key ---
+load_dotenv()
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
+# --- Function to get movie details from TMDB ---
 def get_movie_details(title):
-    """Fetch movie overview and poster using TMDB API."""
+    """Fetch movie overview, poster, release date, and rating using TMDB API."""
     if not TMDB_API_KEY:
-        return {"overview": "No API key found.", "poster": None}
+        return {"overview": "No API key found.", "poster": None, "release_date": None, "rating": None}
 
     url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&query={title}"
     response = requests.get(url)
@@ -23,10 +24,16 @@ def get_movie_details(title):
             movie = data["results"][0]
             return {
                 "overview": movie.get("overview", "No description available."),
-                "poster": f"https://image.tmdb.org/t/p/w200{movie.get('poster_path')}" if movie.get("poster_path") else None
+                "poster": f"https://image.tmdb.org/t/p/w200{movie.get('poster_path')}" if movie.get("poster_path") else None,
+                "release_date": movie.get("release_date", "Unknown"),
+                "rating": movie.get("vote_average", "N/A"),
             }
-    return {"overview": "No details found.", "poster": None}
 
+    return {"overview": "No details found.", "poster": None, "release_date": None, "rating": None}
+
+
+# --- Page Setup ---
+st.set_page_config(page_title="🎬 Rilijin’s Movie Recommender", page_icon="🎥", layout="wide")
 
 st.markdown("""
     <style>
@@ -35,47 +42,34 @@ st.markdown("""
             background: linear-gradient(180deg, #0f0f0f, #1a1a1a);
             color: #f5f5f5;
         }
-
-        /* --- Progress Bar (Keep Your Gradient) --- */
         div[data-testid="stProgress"] > div > div > div {
             background: linear-gradient(90deg, #8A2BE2, #20B2AA);
             height: 10px;
             border-radius: 10px;
         }
-
-        /* --- Buttons: Modern Rounded Look --- */
         button[kind="secondary"] {
             border-radius: 12px !important;
         }
-
-        /* --- Success / Warning Boxes --- */
         .stAlert {
             border-radius: 10px;
             background-color: #222222;
             color: #f5f5f5;
         }
-
-        /* --- Movie Titles --- */
         .stMarkdown p {
             text-align: center;
             font-weight: bold;
             color: #e0e0e0;
         }
-
-        /* --- Movie Descriptions --- */
         .stCaption {
             text-align: center;
             color: #cccccc;
             font-size: 0.9rem;
         }
-
-        /* --- Footer (optional if you add one later) --- */
         footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-
-
+# --- Try to import teammate modules ---
 try:
     from recommender import get_recommendations
     from mood_detection import analyze_mood
@@ -83,40 +77,31 @@ except ImportError:
     get_recommendations = None
     analyze_mood = None
 
-
-# Streamlit Page Setup
-
-st.set_page_config(page_title="🎬 Rilijin’s Movie Recommender", page_icon="🎥", layout="wide")
-
+# --- UI ---
 st.title("🎬 Rilijin’s Movie Recommender")
 st.write("Get movie suggestions based on your mood, favorite films, and genres!")
-
-
-# User Input Fields
 
 user_mood = st.text_input("Enter your current mood (e.g., happy, sad, adventurous):")
 selected_genre = st.selectbox(
     "Choose a genre:",
-    ["Action", "Comedy", "Drama", "Romance", "Horror", "Thriller", "Sci-Fi", "Animation"]
+    ["Action", "Comedy", "Drama", "Romance", "Horror", "Thriller", "Sci-Fi", "Animation"],
 )
 favorite_movies = st.text_area("List a few movies you’ve liked (comma separated):")
 
-
-# Fetch Recommendations with Session State 
+# --- Session State setup ---
 if "recommended_movies" not in st.session_state:
     st.session_state.recommended_movies = []
 
-# Placeholders for messages
 status_placeholder = st.empty()
 
-# Use columns to align buttons side by side
+# --- Buttons ---
 col1, col2 = st.columns(2)
 with col1:
     get_clicked = st.button("Get Recommendations 🎬")
 with col2:
     clear_clicked = st.button("Clear Results")
 
-# Get Recommendations Logic 
+# --- Get Recommendations Logic ---
 if get_clicked:
     with st.spinner("Fetching personalized recommendations..."):
         progress = st.progress(0)
@@ -143,12 +128,12 @@ if get_clicked:
                 {"title": "Tenet"},
             ]
 
-# Clear Results Logic 
+# --- Clear Results ---
 if clear_clicked:
     st.session_state.recommended_movies = []
     st.rerun()
 
-# Display Recommendations 
+# --- Display Recommendations ---
 if st.session_state.get("recommended_movies"):
     st.subheader("🎥 Personalized Movie Recommendations")
 
@@ -158,15 +143,19 @@ if st.session_state.get("recommended_movies"):
             details = get_movie_details(movie["title"])
             poster = details["poster"] or "https://via.placeholder.com/200x300?text=No+Image"
             st.markdown(
-    f"""
-    <div style='text-align:center;'>
-        <img src='{poster}' width='200' style='border-radius:10px; margin-bottom:10px;'>
-        <p style='font-weight:bold; color:#f0f0f0;'>{movie['title']}</p>
-        <p style='font-size:0.9rem; color:#cccccc;'>{details["overview"][:200]}...</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+                f"""
+                <div style='text-align:center;'>
+                    <img src='{poster}' width='200' style='border-radius:10px; margin-bottom:10px;'>
+                    <p style='font-weight:bold; color:#f0f0f0;'>{movie['title']}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            with st.expander(f"More Info about {movie['title']}"):
+                st.write(f"**Release Date:** {details['release_date']}")
+                st.write(f"**Rating:** {details['rating']}/10 ⭐")
+                st.write(details["overview"] or "No additional details available.")
 
             time.sleep(0.1)
 
@@ -175,7 +164,7 @@ if st.session_state.get("recommended_movies"):
     success_box.empty()
 
 elif "recommended_movies" in st.session_state and not st.session_state.recommended_movies:
-    # Only show warning if the session variable exists but is empty
     warning_box = status_placeholder.warning("No recommendations available yet. Try again later!")
     time.sleep(3)
     warning_box.empty()
+
