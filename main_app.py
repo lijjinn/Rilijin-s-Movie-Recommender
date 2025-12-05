@@ -88,6 +88,7 @@ selected_genre = st.selectbox(
 )
 favorite_movies = st.text_area("List a few movies you’ve liked (comma separated):")
 
+
 # --- Session State setup ---
 if "recommended_movies" not in st.session_state:
     st.session_state.recommended_movies = []

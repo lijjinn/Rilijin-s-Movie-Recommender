@@ -62,23 +62,44 @@ MOOD_KEYWORD_MAP = {
 # Hybrid Scoring System
 # -----------------------------------------------------------
 def compute_score(movie, mood_keywords, genre_id):
-    score = 0
+    # NOTE: movie here is expected to be the TMDB 'movie' dict returned
+    # from the details endpoint (so it may include 'keywords' and 'genres').
+    score = 0.0
 
-    # Rating weight
-    score += movie.get("vote_average", 0) * 1.5
+    # WEIGHTS CAN BE TUNED HERE
+    WEIGHT_RATING = 1.0
+    WEIGHT_POPULARITY = 5.0
+    WEIGHT_MOOD_PER_MATCH = 10.0
+    WEIGHT_GENRE_MATCH = 8.0
 
-    # Popularity weight
-    score += movie.get("popularity", 0) * 0.05
+    # Base: rating and popularity
+    score += movie.get("vote_average", 0) * WEIGHT_RATING
+    score += movie.get("popularity", 0) * WEIGHT_POPULARITY
 
-    # Mood keyword match
-    overview = movie.get("overview", "").lower()
-    if any(kw in overview for kw in mood_keywords):
-        score += 14
+    # Prepare a combined text/keyword bag to check mood keywords against
+    text_fields = []
+    if movie.get("title"):
+        text_fields.append(movie.get("title", ""))
+    if movie.get("overview"):
+        text_fields.append(movie.get("overview", ""))
+    # keywords come as movie.get('keywords', {}).get('keywords', []) when details fetched
+    kw_objs = movie.get("keywords", {}).get("keywords", []) if isinstance(movie.get("keywords", {}), dict) else []
+    kw_names = [k.get("name", "") for k in kw_objs]
+    text_fields.extend(kw_names)
+    combined = " ".join(text_fields).lower()
 
-    # Genre match
-    if genre_id in movie.get("genre_ids", []):
-        score += 10
+    # Mood matching: count matches (not just boolean) so stronger signals matter
+    mood_matches = sum(1 for kw in mood_keywords if kw in combined)
+    score += mood_matches * WEIGHT_MOOD_PER_MATCH
 
+    # Genre matching: check genre ids and genre names if available
+    genres = movie.get("genres") or []
+    genre_ids = [g.get("id") for g in genres]
+    genre_names = [g.get("name", "").lower() for g in genres]
+    if genre_id and genre_id in genre_ids:
+        score += WEIGHT_GENRE_MATCH
+
+    # Return final score
     return score
 
 # -----------------------------------------------------------
@@ -101,35 +122,54 @@ def get_recommendations(mood_data, genre, favorite_text):
     }
     genre_id = GENRE_MAP.get(genre)
 
-    favorites = [m.strip() for m in favorite_text.split(",") if m.strip()]
-    similar_pool = []
+    favorites = [m.strip() for m in favorite_text.split(",") if m.strip()] if favorite_text else []
 
-    # -----------------------------------------------------------
-    # For each favorite movie, add similar movies
-    # -----------------------------------------------------------
-    for fav in favorites:
-        movie_id = search_movie_id(fav)
-        if movie_id:
-            similar_pool.extend(get_tmdb_similar(movie_id))
+    candidates = {}
 
-    
-    # if user has no favorites, fallback to popular movies
-    if not similar_pool:
-        url = f"{BASE_URL}/movie/popular?api_key={TMDB_API_KEY}"
-        similar_pool = tmdb_request(url).get("results", [])
+    # Helper to add movies to candidates dict keyed by id
+    def add_candidate(movie_obj):
+        mid = movie_obj.get("id")
+        if not mid:
+            return
+        if mid not in candidates:
+            candidates[mid] = movie_obj
 
-    # -----------------------------------------------------------
-    # Score all candidate movies
-    # -----------------------------------------------------------
+    # 1) If favorites given -> gather similar movies
+    if favorites:
+        for fav in favorites:
+            movie_id = search_movie_id(fav)
+            if movie_id:
+                sims = get_tmdb_similar(movie_id)
+                for m in sims:
+                    add_candidate(m)
+
+    # 2) If still empty, fallback to Discover 
+    if not candidates:
+        if genre_id:
+            url = f"{BASE_URL}/discover/movie?api_key={TMDB_API_KEY}&with_genres={genre_id}&sort_by=popularity.desc"
+        else:
+            url = f"{BASE_URL}/movie/popular?api_key={TMDB_API_KEY}"
+        results = tmdb_request(url).get("results", [])
+        for m in results:
+            add_candidate(m)
+
+    # Limit candidates to a reasonable number to avoid too many detail requests
+    MAX_CANDIDATES = 150
+    candidate_list = list(candidates.values())[:MAX_CANDIDATES]
+
+    # Score candidates using details
     scored = []
-    for movie in similar_pool:
-        score = compute_score(movie, mood_keywords, genre_id)
-        scored.append((movie, score))
-    
+    for movie in candidate_list:
+        # Get details to access keywords and full genres
+        details = get_movie_details(movie.get("id")) or {}
+        # merge shallow fields from movie into details so compute_score sees rating/popularity/title/overview
+        merged = {**movie, **details}
+        score = compute_score(merged, mood_keywords, genre_id)
+        scored.append((merged, score))
+
     # Sort by score descending
     scored.sort(key=lambda x: x[1], reverse=True)
 
-    # -----------------------------------------------------------
-    # Return top 15 results as Streamlit-compatible dicts
-    # -----------------------------------------------------------
-    return [{"title": m["title"]} for m, s in scored[:15]]
+    # Return top 15 results as Streamlit-compatible dicts (title)
+    top = [{"title": m.get("title")} for m, s in scored[:15]]
+    return top
